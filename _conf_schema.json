@@ -12,7 +12,7 @@
     "items": {
       "type": {
         "description": "适配器类型",
-        "hint": "选择要使用的图像生成接口。这些接口都用于调用 Gemini 系列模型",
+        "hint": "选择要使用的图像生成接口",
         "type": "string",
         "default": "gemini",
         "options": [
@@ -23,20 +23,20 @@
       },
       "provider_id": {
         "description": "选择提供商",
-        "hint": "从系统已配置的提供商中选择一个用于图像生成。",
+        "hint": "从系统已配置的提供商中选择一个用于图像生成",
         "type": "string",
         "default": "",
         "_special": "select_provider"
       },
       "base_url": {
         "description": "API Base URL",
-        "hint": "仅在未选择系统提供商时需要填写。留空则自动使用默认值",
+        "hint": "仅在未选择系统提供商时需要填写",
         "type": "string",
         "default": ""
       },
       "api_keys": {
         "description": "API Keys",
-        "hint": "仅在未选择系统提供商时需要填写。支持多个 key 用于自动轮询,提高稳定性",
+        "hint": "仅在未选择系统提供商时需要填写",
         "type": "list",
         "default": []
       },

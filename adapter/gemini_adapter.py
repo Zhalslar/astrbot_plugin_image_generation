@@ -1,103 +1,74 @@
-"""
-Gemini API adapter for image generation
-Gemini API 图像生成适配器
-"""
-
 from __future__ import annotations
 
+import asyncio
 import base64
 
 import aiohttp
 
 from astrbot.api import logger
 
-from ..core import (
-    AdapterConfig,
-    AdapterMetadata,
-    BaseImageAdapter,
-    GenerationRequest,
-    GenerationResult,
-)
+from ..core.base_adapter import BaseImageAdapter
+from ..core.types import GenerationRequest, GenerationResult
 
 
 class GeminiAdapter(BaseImageAdapter):
-    """Gemini 图像生成适配器"""
+    """Gemini native image generation adapter."""
 
-    def __init__(self, config: AdapterConfig):
-        super().__init__(config)
-        self.safety_settings = config.extra_config.get("safety_settings", "BLOCK_NONE")
-
-    def metadata(self) -> AdapterMetadata:
-        return AdapterMetadata(
-            name="gemini",
-            display_name="Gemini",
-            description="Google Gemini 图像生成模型",
-            supported_features=[
-                "text_to_image",
-                "image_to_image",
-                "aspect_ratio",
-                "resolution",
-                "safety_settings",
-            ],
-            default_models=[
-                "gemini-2.0-flash-exp-image-generation",
-                "gemini-2.5-flash-image",
-                "gemini-2.5-flash-image-preview",
-                "gemini-3-pro-image-preview",
-            ],
-            supports_image_to_image=True,
-            supports_aspect_ratio=True,
-            supports_resolution=True,
-            supports_safety_settings=True,
-        )
+    DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com"
 
     async def generate(self, request: GenerationRequest) -> GenerationResult:
-        """
-        使用 Gemini API 生成图像
+        if not self.api_keys:
+            return GenerationResult(images=None, error="未配置 API Key")
 
-        Args:
-            request: 生成请求
+        last_error = "未配置 API Key"
+        for attempt in range(self.max_retry_attempts):
+            if attempt:
+                logger.info(
+                    f"[ImageGen] Retry Gemini ({attempt + 1}/{self.max_retry_attempts})"
+                )
 
-        Returns:
-            GenerationResult: 生成结果
-        """
-        prefix = f"[{request.task_id}] " if request.task_id else ""
+            images, err = await self._generate_once(request)
+            if images is not None:
+                return GenerationResult(images=images, error=None)
 
-        try:
-            payload = self._build_payload(request)
-            session = self._get_session()
-            response_data = await self._make_request(session, payload, request.task_id)
+            last_error = err or "生成失败"
+            if attempt < self.max_retry_attempts - 1:
+                self._rotate_api_key()
+                # simple backoff when looping keys
+                if (attempt + 1) % max(1, len(self.api_keys)) == 0:
+                    await asyncio.sleep(
+                        min(2 ** ((attempt + 1) // len(self.api_keys)), 10)
+                    )
 
-            if response_data is None:
-                return GenerationResult(success=False, error_message="API 请求失败")
+        return GenerationResult(images=None, error=f"重试失败: {last_error}")
 
-            images = self._extract_images(response_data, request.task_id)
-            if images:
-                return GenerationResult(success=True, images=images)
+    async def _generate_once(
+        self, request: GenerationRequest
+    ) -> tuple[list[bytes] | None, str | None]:
+        payload = self._build_payload(request)
+        session = self._get_session()
+        response = await self._make_request(session, payload, request.task_id)
+        if response is None:
+            return None, "API 请求失败"
 
-            return GenerationResult(success=False, error_message="响应中未找到图片数据")
-
-        except Exception as e:
-            logger.error(f"[Gemini] {prefix}生成失败: {e}", exc_info=True)
-            return GenerationResult(success=False, error_message=f"生成失败: {str(e)}")
+        images = self._extract_images(response, request.task_id)
+        if images:
+            return images, None
+        return None, "响应中未找到图片数据"
 
     def _build_payload(self, request: GenerationRequest) -> dict:
-        """构建 Gemini API 请求负载"""
-        generation_config = {"responseModalities": ["IMAGE"]}
-        image_config = {}
+        generation_config: dict = {"responseModalities": ["IMAGE"]}
+        image_config: dict = {}
 
-        # 如果有参考图，则不传 aspect_ratio，使用参考图的比例
-        if request.aspect_ratio and not request.is_image_to_image:
+        if request.aspect_ratio and not request.images:
             image_config["aspectRatio"] = request.aspect_ratio
 
-        # imageSize 仅 gemini-3-pro-image-preview 支持
-        if request.resolution and "gemini-3" in self.config.model.lower():
+        if request.resolution and "gemini-3" in self.model.lower():
             image_config["imageSize"] = request.resolution
 
         if image_config:
             generation_config["imageConfig"] = image_config
 
-        # 安全设置
         safety_settings = []
         if self.safety_settings:
             for category in [
@@ -111,102 +82,81 @@ class GeminiAdapter(BaseImageAdapter):
                     {"category": category, "threshold": self.safety_settings}
                 )
 
-        # 构建内容部分
         parts = [{"text": request.prompt}]
-
-        # 添加参考图片
-        if request.reference_images:
-            for image_data in request.reference_images:
-                encoded_data = base64.b64encode(image_data.data).decode("utf-8")
-                parts.append(
-                    {
-                        "inline_data": {
-                            "mime_type": image_data.mime_type,
-                            "data": encoded_data,
-                        }
+        for image in request.images:
+            parts.append(
+                {
+                    "inline_data": {
+                        "mime_type": image.mime_type,
+                        "data": base64.b64encode(image.data).decode("utf-8"),
                     }
-                )
+                }
+            )
 
-        payload = {
+        payload: dict = {
             "contents": [{"parts": parts}],
             "generationConfig": generation_config,
-            "safetySettings": safety_settings,
         }
 
-        self._log_request("Gemini API", payload)
+        if safety_settings:
+            payload["safetySettings"] = safety_settings
+
         return payload
 
     async def _make_request(
-        self, session: aiohttp.ClientSession, payload: dict, task_id: str | None = None
+        self,
+        session: aiohttp.ClientSession,
+        payload: dict,
+        task_id: str | None,
     ) -> dict | None:
-        """发送 Gemini API 请求"""
-        prefix = f"[{task_id}] " if task_id else ""
-        url = (
-            f"{self.config.base_url}/v1beta/models/{self.config.model}:generateContent"
-        )
-
+        url = f"{self.base_url or self.DEFAULT_BASE_URL}/v1beta/models/{self.model}:generateContent"
         api_key = self._get_current_api_key()
-        masked_key = self._mask_api_key(api_key)
-        logger.debug(f"[Gemini] {prefix}Request URL: {url}, Key: {masked_key}")
+        masked_key = api_key[:4] + "****" + api_key[-4:] if len(api_key) > 8 else "****"
+        prefix = f"[{task_id}] " if task_id else ""
+        logger.debug(f"[ImageGen] {prefix}Gemini request -> {url}, key={masked_key}")
 
         headers = {
             "Content-Type": "application/json",
             "x-goog-api-key": api_key,
         }
 
-        try:
-            async with session.post(
-                url,
-                json=payload,
-                headers=headers,
-                timeout=aiohttp.ClientTimeout(total=self.config.timeout),
-                proxy=self.config.proxy,
-            ) as response:
-                logger.debug(f"[Gemini] {prefix}API Response Status: {response.status}")
-
-                if response.status != 200:
-                    error_text = await response.text()
-                    error_preview = (
-                        error_text[:200] + "..."
-                        if len(error_text) > 200
-                        else error_text
-                    )
-                    logger.error(
-                        f"[Gemini] {prefix}API 错误: {response.status} - {error_preview}"
-                    )
-                    return None
-
-                return await response.json()
-
-        except Exception as e:
-            logger.error(f"[Gemini] {prefix}请求异常: {e}")
-            return None
+        async with session.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=self.timeout),
+            proxy=self.proxy,
+        ) as response:
+            logger.debug(f"[ImageGen] {prefix}Gemini status -> {response.status}")
+            if response.status != 200:
+                error_text = await response.text()
+                preview = (
+                    error_text[:200] + "..." if len(error_text) > 200 else error_text
+                )
+                logger.error(
+                    f"[ImageGen] {prefix}Gemini error {response.status}: {preview}"
+                )
+                return None
+            return await response.json()
 
     def _extract_images(
-        self, response: dict, task_id: str | None = None
+        self, response: dict, task_id: str | None
     ) -> list[bytes] | None:
-        """从 Gemini API 响应中提取图片数据"""
         prefix = f"[{task_id}] " if task_id else ""
-
         try:
             candidates = response.get("candidates", [])
-            logger.debug(f"[Gemini] {prefix}Candidates count: {len(candidates)}")
-
+            logger.debug(f"[ImageGen] {prefix}Gemini candidates: {len(candidates)}")
             if not candidates:
                 return None
 
             parts = candidates[0].get("content", {}).get("parts", [])
-            images = []
-
+            images: list[bytes] = []
             for part in parts:
                 inline_data = part.get("inline_data") or part.get("inlineData")
-                if inline_data:
-                    data = inline_data.get("data")
-                    if data:
-                        images.append(base64.b64decode(data))
+                if inline_data and inline_data.get("data"):
+                    images.append(base64.b64decode(inline_data["data"]))
 
             return images if images else None
-
-        except Exception as e:
-            logger.error(f"[Gemini] {prefix}解析响应失败: {e}")
+        except Exception as exc:  # noqa: BLE001
+            logger.error(f"[ImageGen] Gemini parse failed: {exc}")
             return None
