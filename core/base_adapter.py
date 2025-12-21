@@ -10,7 +10,7 @@ from .types import AdapterConfig, GenerationRequest, GenerationResult
 
 
 class BaseImageAdapter(abc.ABC):
-    """Base class for image generation adapters."""
+    """图像生成适配器基类。"""
 
     def __init__(self, config: AdapterConfig):
         self.config = config
@@ -25,30 +25,34 @@ class BaseImageAdapter(abc.ABC):
         self._session: aiohttp.ClientSession | None = None
 
     async def close(self) -> None:
-        """Close underlying HTTP session."""
+        """关闭底层的 HTTP 会话。"""
 
         if self._session and not self._session.closed:
             await self._session.close()
         self._session = None
 
     def _get_session(self) -> aiohttp.ClientSession:
+        """获取或创建 HTTP 会话。"""
         if self._session is None or self._session.closed:
             self._session = aiohttp.ClientSession()
         return self._session
 
     def _get_current_api_key(self) -> str:
+        """获取当前使用的 API Key。"""
         if not self.api_keys:
             return ""
         return self.api_keys[self.current_key_index % len(self.api_keys)]
 
     def _rotate_api_key(self) -> None:
+        """轮换 API Key。"""
         if len(self.api_keys) > 1:
             self.current_key_index = (self.current_key_index + 1) % len(self.api_keys)
-            logger.info(f"[ImageGen] Rotate API key -> index {self.current_key_index}")
+            logger.info(f"[ImageGen] 轮换 API Key -> 索引 {self.current_key_index}")
 
     def update_model(self, model: str) -> None:
+        """更新使用的模型。"""
         self.model = model
 
     @abc.abstractmethod
     async def generate(self, request: GenerationRequest) -> GenerationResult:
-        """Generate images for the given request."""
+        """为给定的请求生成图像。"""

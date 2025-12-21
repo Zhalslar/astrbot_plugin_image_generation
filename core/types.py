@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 
 class AdapterType(str, enum.Enum):
-    """Supported image generation adapter types."""
+    """支持的图像生成适配器类型。"""
 
     GEMINI = "gemini"
     GEMINI_OPENAI = "gemini(OpenAI)"
@@ -14,7 +14,7 @@ class AdapterType(str, enum.Enum):
 
 @dataclass
 class AdapterMetadata:
-    """Metadata about an adapter's capabilities."""
+    """关于适配器能力的元数据。"""
 
     name: str
     supports_aspect_ratio: bool = True
@@ -23,7 +23,7 @@ class AdapterMetadata:
 
 @dataclass
 class AdapterConfig:
-    """Configuration required to construct an adapter."""
+    """构造适配器所需的配置。"""
 
     type: AdapterType = AdapterType.GEMINI
     base_url: str | None = None
@@ -39,7 +39,7 @@ class AdapterConfig:
 
 @dataclass
 class ImageData:
-    """Image bytes with an associated MIME type."""
+    """带有 MIME 类型的图像二进制数据。"""
 
     data: bytes
     mime_type: str
@@ -47,7 +47,7 @@ class ImageData:
 
 @dataclass
 class GenerationRequest:
-    """User-facing generation request."""
+    """用户生图请求。"""
 
     prompt: str
     images: list[ImageData] = field(default_factory=list)
@@ -58,7 +58,7 @@ class GenerationRequest:
 
 @dataclass
 class GenerationResult:
-    """Result of a generation attempt."""
+    """生图尝试的结果。"""
 
     images: list[bytes] | None = None
     error: str | None = None

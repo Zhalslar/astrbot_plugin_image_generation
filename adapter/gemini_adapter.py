@@ -12,11 +12,12 @@ from ..core.types import GenerationRequest, GenerationResult
 
 
 class GeminiAdapter(BaseImageAdapter):
-    """Gemini native image generation adapter."""
+    """Gemini 原生图像生成适配器。"""
 
     DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com"
 
     async def generate(self, request: GenerationRequest) -> GenerationResult:
+        """执行生图逻辑。"""
         if not self.api_keys:
             return GenerationResult(images=None, error="未配置 API Key")
 
@@ -24,7 +25,7 @@ class GeminiAdapter(BaseImageAdapter):
         for attempt in range(self.max_retry_attempts):
             if attempt:
                 logger.info(
-                    f"[ImageGen] Retry Gemini ({attempt + 1}/{self.max_retry_attempts})"
+                    f"[ImageGen] 重试 Gemini ({attempt + 1}/{self.max_retry_attempts})"
                 )
 
             images, err = await self._generate_once(request)
@@ -34,7 +35,7 @@ class GeminiAdapter(BaseImageAdapter):
             last_error = err or "生成失败"
             if attempt < self.max_retry_attempts - 1:
                 self._rotate_api_key()
-                # simple backoff when looping keys
+                # 轮换 Key 时进行简单的退避
                 if (attempt + 1) % max(1, len(self.api_keys)) == 0:
                     await asyncio.sleep(
                         min(2 ** ((attempt + 1) // len(self.api_keys)), 10)
@@ -45,6 +46,7 @@ class GeminiAdapter(BaseImageAdapter):
     async def _generate_once(
         self, request: GenerationRequest
     ) -> tuple[list[bytes] | None, str | None]:
+        """执行单次生图请求。"""
         payload = self._build_payload(request)
         session = self._get_session()
         response = await self._make_request(session, payload, request.task_id)
@@ -57,6 +59,7 @@ class GeminiAdapter(BaseImageAdapter):
         return None, "响应中未找到图片数据"
 
     def _build_payload(self, request: GenerationRequest) -> dict:
+        """构建请求载荷。"""
         generation_config: dict = {"responseModalities": ["IMAGE"]}
         image_config: dict = {}
 
@@ -109,11 +112,12 @@ class GeminiAdapter(BaseImageAdapter):
         payload: dict,
         task_id: str | None,
     ) -> dict | None:
+        """发送 API 请求。"""
         url = f"{self.base_url or self.DEFAULT_BASE_URL}/v1beta/models/{self.model}:generateContent"
         api_key = self._get_current_api_key()
         masked_key = api_key[:4] + "****" + api_key[-4:] if len(api_key) > 8 else "****"
         prefix = f"[{task_id}] " if task_id else ""
-        logger.debug(f"[ImageGen] {prefix}Gemini request -> {url}, key={masked_key}")
+        logger.debug(f"[ImageGen] {prefix}Gemini 请求 -> {url}, key={masked_key}")
 
         headers = {
             "Content-Type": "application/json",
@@ -127,14 +131,14 @@ class GeminiAdapter(BaseImageAdapter):
             timeout=aiohttp.ClientTimeout(total=self.timeout),
             proxy=self.proxy,
         ) as response:
-            logger.debug(f"[ImageGen] {prefix}Gemini status -> {response.status}")
+            logger.debug(f"[ImageGen] {prefix}Gemini 状态 -> {response.status}")
             if response.status != 200:
                 error_text = await response.text()
                 preview = (
                     error_text[:200] + "..." if len(error_text) > 200 else error_text
                 )
                 logger.error(
-                    f"[ImageGen] {prefix}Gemini error {response.status}: {preview}"
+                    f"[ImageGen] {prefix}Gemini 错误 {response.status}: {preview}"
                 )
                 return None
             return await response.json()
@@ -142,10 +146,11 @@ class GeminiAdapter(BaseImageAdapter):
     def _extract_images(
         self, response: dict, task_id: str | None
     ) -> list[bytes] | None:
+        """从响应中提取图像数据。"""
         prefix = f"[{task_id}] " if task_id else ""
         try:
             candidates = response.get("candidates", [])
-            logger.debug(f"[ImageGen] {prefix}Gemini candidates: {len(candidates)}")
+            logger.debug(f"[ImageGen] {prefix}Gemini 候选结果: {len(candidates)}")
             if not candidates:
                 return None
 
@@ -158,5 +163,5 @@ class GeminiAdapter(BaseImageAdapter):
 
             return images if images else None
         except Exception as exc:  # noqa: BLE001
-            logger.error(f"[ImageGen] Gemini parse failed: {exc}")
+            logger.error(f"[ImageGen] Gemini 解析失败: {exc}")
             return None

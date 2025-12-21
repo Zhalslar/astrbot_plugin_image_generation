@@ -14,11 +14,12 @@ from ..core.types import GenerationRequest, GenerationResult
 
 
 class GeminiOpenAIAdapter(BaseImageAdapter):
-    """Gemini image generation via OpenAI-compatible chat completions."""
+    """通过 OpenAI 兼容的聊天补全接口进行 Gemini 图像生成。"""
 
     DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com"
 
     async def generate(self, request: GenerationRequest) -> GenerationResult:
+        """执行生图逻辑。"""
         if not self.api_keys:
             return GenerationResult(images=None, error="未配置 API Key")
 
@@ -26,7 +27,7 @@ class GeminiOpenAIAdapter(BaseImageAdapter):
         for attempt in range(self.max_retry_attempts):
             if attempt:
                 logger.info(
-                    f"[ImageGen] Retry OpenAI adapter ({attempt + 1}/{self.max_retry_attempts})"
+                    f"[ImageGen] 重试 OpenAI 适配器 ({attempt + 1}/{self.max_retry_attempts})"
                 )
 
             images, err = await self._generate_once(request)
@@ -46,6 +47,7 @@ class GeminiOpenAIAdapter(BaseImageAdapter):
     async def _generate_once(
         self, request: GenerationRequest
     ) -> tuple[list[bytes] | None, str | None]:
+        """执行单次生图请求。"""
         payload = self._build_payload(request)
         session = self._get_session()
         response = await self._make_request(session, payload, request.task_id)
@@ -56,14 +58,15 @@ class GeminiOpenAIAdapter(BaseImageAdapter):
         if images:
             return images, None
 
-        # attempt to surface textual error
+        # 尝试提取文本错误信息
         if "choices" in response and response["choices"]:
             content = response["choices"][0].get("message", {}).get("content")
             if isinstance(content, str) and content.strip():
-                return None, f"未生成图片，API返回文本: {content[:100]}"
+                return None, f"未生成图片，API 返回文本: {content[:100]}"
         return None, "响应中未找到图片数据"
 
     def _build_payload(self, request: GenerationRequest) -> dict:
+        """构建请求载荷。"""
         message_content: list[dict] = [
             {"type": "text", "text": f"Generate an image: {request.prompt}"}
         ]
@@ -104,11 +107,12 @@ class GeminiOpenAIAdapter(BaseImageAdapter):
         payload: dict,
         task_id: str | None,
     ) -> dict | None:
+        """发送 API 请求。"""
         url = f"{self.base_url or self.DEFAULT_BASE_URL}/v1/chat/completions"
         api_key = self._get_current_api_key()
         masked_key = api_key[:4] + "****" + api_key[-4:] if len(api_key) > 8 else "****"
         prefix = f"[{task_id}] " if task_id else ""
-        logger.debug(f"[ImageGen] {prefix}OpenAI request -> {url}, key={masked_key}")
+        logger.debug(f"[ImageGen] {prefix}OpenAI 请求 -> {url}, key={masked_key}")
 
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -122,37 +126,39 @@ class GeminiOpenAIAdapter(BaseImageAdapter):
             timeout=aiohttp.ClientTimeout(total=self.timeout),
             proxy=self.proxy,
         ) as response:
-            logger.debug(f"[ImageGen] {prefix}OpenAI status -> {response.status}")
+            logger.debug(f"[ImageGen] {prefix}OpenAI 状态 -> {response.status}")
             if response.status != 200:
                 error_text = await response.text()
                 preview = (
                     error_text[:200] + "..." if len(error_text) > 200 else error_text
                 )
                 logger.error(
-                    f"[ImageGen] {prefix}OpenAI error {response.status}: {preview}"
+                    f"[ImageGen] {prefix}OpenAI 错误 {response.status}: {preview}"
                 )
                 return None
             return await response.json()
 
     async def _download_image_from_url(self, url: str) -> bytes | None:
+        """从 URL 下载图像。"""
         try:
             session = self._get_session()
             async with session.get(url, timeout=30) as response:
                 if response.status == 200:
                     return await response.read()
                 logger.error(
-                    f"[ImageGen] Download image failed: {response.status} - {url}"
+                    f"[ImageGen] 下载图像失败: {response.status} - {url}"
                 )
         except Exception as exc:  # noqa: BLE001
-            logger.error(f"[ImageGen] Download image error: {exc}")
+            logger.error(f"[ImageGen] 下载图像出错: {exc}")
         return None
 
     async def _extract_images(
         self, response_data: dict[str, Any]
     ) -> list[bytes] | None:
+        """从响应数据中提取图像。"""
         images: list[bytes] = []
 
-        # DALL-E style
+        # DALL-E 风格
         if isinstance(response_data.get("data"), list):
             for item in response_data["data"]:
                 if not isinstance(item, dict):
@@ -171,7 +177,7 @@ class GeminiOpenAIAdapter(BaseImageAdapter):
                         if decoded:
                             images.append(decoded)
 
-        # Chat completion style
+        # 聊天补全风格
         if choices := response_data.get("choices"):
             message = (
                 choices[0].get("message", {}) if isinstance(choices[0], dict) else {}
@@ -236,10 +242,11 @@ class GeminiOpenAIAdapter(BaseImageAdapter):
         return images or None
 
     def _decode_image_url(self, url: str) -> bytes | None:
+        """解码 Data URL 形式的图像。"""
         if url.startswith("data:image/") and ";base64," in url:
             try:
                 _, _, data_part = url.partition(";base64,")
                 return base64.b64decode(data_part)
             except Exception as exc:  # noqa: BLE001
-                logger.error(f"[ImageGen] Base64 decode failed: {exc}")
+                logger.error(f"[ImageGen] Base64 解码失败: {exc}")
         return None

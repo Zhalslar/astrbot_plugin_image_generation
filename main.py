@@ -25,6 +25,7 @@ from .core.generator import ImageGenerator
 from .core.types import AdapterConfig, AdapterType, GenerationRequest, ImageData
 from .core.utils import validate_aspect_ratio, validate_resolution
 
+# 默认支持的模型列表
 DEFAULT_MODELS = [
     "gemini-2.0-flash-exp-image-generation",
     "gemini-2.5-flash-image",
@@ -35,7 +36,7 @@ DEFAULT_MODELS = [
 
 @pydantic_dataclass
 class ImageGenerationTool(FunctionTool[AstrAgentContext]):
-    """LLM-callable image generation tool."""
+    """LLM 可调用的图像生成工具。"""
 
     name: str = "gemini_generate_image"
     description: str = "使用 Gemini 模型生成或修改图片"
@@ -50,7 +51,7 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
                 "aspect_ratio": {
                     "type": "string",
                     "description": "图片宽高比",
-                    "enum": list(DEFAULT_MODELS),  # placeholder replaced below
+                    "enum": list(DEFAULT_MODELS),  # 占位符，稍后会被替换
                 },
                 "resolution": {
                     "type": "string",
@@ -70,6 +71,7 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
     plugin: object | None = None
 
     def __post_init_post_parse__(self):
+        """初始化后处理，动态补齐宽高比枚举。"""
         # 初始化时动态补齐宽高比枚举，避免写死在默认 schema 中
         self.parameters["properties"]["aspect_ratio"]["enum"] = [
             "自动",
@@ -88,6 +90,7 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs: Any
     ) -> ToolExecResult:
+        """执行工具调用。"""
         # 获取提示词
         if not (prompt := kwargs.get("prompt", "")):
             return "请提供图片生成的提示词"
@@ -107,7 +110,7 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
 
         if not event:
             logger.warning(
-                f"[ImageGen] Tool call context missing event. Context type: {type(context)}"
+                f"[ImageGen] 工具调用上下文缺少事件。上下文类型: {type(context)}"
             )
             return "❌ 无法获取当前消息上下文"
 
@@ -115,7 +118,6 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
             return "❌ 未配置 API Key，无法生成图片"
 
         # 工具调用同样支持获取上下文参考图（消息/引用/头像）
-        # Tool calls also support retrieving context reference images (message/quote/avatar)
         images_data = await plugin._get_reference_images_for_tool(event)
 
         # 处理头像引用参数
@@ -137,10 +139,10 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
                     if avatar_data:
                         images_data.append((avatar_data, "image/jpeg"))
                         logger.info(
-                            f"[ImageGen] Added avatar of {user_id} as reference"
+                            f"[ImageGen] 已添加 {user_id} 的头像作为参考图"
                         )
 
-        # 生成任务ID
+        # 生成任务 ID
         task_id = hashlib.md5(
             f"{time.time()}{event.unified_msg_origin}".encode()
         ).hexdigest()[:8]
@@ -162,7 +164,7 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
 
 
 class ImageGenerationPlugin(Star):
-    """Gemini 图像生成插件（重构版）"""
+    """Gemini 图像生成插件"""
 
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
@@ -202,9 +204,9 @@ class ImageGenerationPlugin(Star):
             f"[ImageGen] 插件加载完成，模型: {self.adapter_config.model if self.adapter_config else '未知'}"
         )
 
-    # ---------------------------- Config -----------------------------
+    # ---------------------------- 配置加载 -----------------------------
     def _load_config(self) -> None:
-        """加载插件配置"""
+        """加载插件配置。"""
         adapter_cfg = self.config.get("adapter", {})
         gen_cfg = self.config.get("generation", {})
 
@@ -256,7 +258,7 @@ class ImageGenerationPlugin(Star):
         self.presets = self._load_presets(self.config.get("presets", []))
 
     def _clean_base_url(self, url: str) -> str:
-        """清理 Base URL，移除末尾的 /v1"""
+        """清理 Base URL，移除末尾的 /v1。"""
         if not url:
             return ""
         url = url.rstrip("/")
@@ -265,7 +267,7 @@ class ImageGenerationPlugin(Star):
         return url.rstrip("/")
 
     def _load_provider_config(self, provider_id: str) -> tuple[list[str], str]:
-        """从 AstrBot 系统提供商加载配置"""
+        """从 AstrBot 系统提供商加载配置。"""
         provider = self.context.get_provider_by_id(provider_id)
         if not provider:
             logger.warning(f"[ImageGen] 未找到提供商 {provider_id}，使用插件配置")
@@ -293,7 +295,7 @@ class ImageGenerationPlugin(Star):
         return api_keys, base_url
 
     def _load_presets(self, presets_config: list[Any]) -> dict[str, Any]:
-        """加载预设配置"""
+        """加载预设配置。"""
         presets: dict[str, Any] = {}
         if not isinstance(presets_config, list):
             return presets
@@ -305,10 +307,10 @@ class ImageGenerationPlugin(Star):
                     presets[name.strip()] = prompt.strip()
         return presets
 
-    # --------------------------- Commands ----------------------------
+    # --------------------------- 指令处理 ----------------------------
     @filter.command("生图")
     async def generate_image_command(self, event: AstrMessageEvent):
-        """处理生图指令"""
+        """处理生图指令。"""
         user_id = event.unified_msg_origin
 
         # 检查频率限制
@@ -403,7 +405,7 @@ class ImageGenerationPlugin(Star):
 
     @filter.command("生图模型")
     async def model_command(self, event: AstrMessageEvent, model_index: str = ""):
-        """切换生图模型"""
+        """切换生图模型。"""
         if not self.adapter_config:
             yield event.plain_result("❌ 适配器未初始化")
             return
@@ -436,7 +438,7 @@ class ImageGenerationPlugin(Star):
 
     @filter.command("预设")
     async def preset_command(self, event: AstrMessageEvent):
-        """管理生图预设"""
+        """管理生图预设。"""
         user_id = event.unified_msg_origin
         masked_uid = (
             user_id[:4] + "****" + user_id[-4:] if len(user_id) > 8 else user_id
@@ -480,9 +482,9 @@ class ImageGenerationPlugin(Star):
             else:
                 yield event.plain_result(f"❌ 预设不存在: {name}")
 
-    # ----------------------------- Helpers ---------------------------
+    # ----------------------------- 辅助方法 ---------------------------
     def _check_rate_limit(self, user_id: str) -> bool:
-        """检查用户请求频率限制"""
+        """检查用户请求频率限制。"""
         if self.rate_limit_seconds <= 0:
             return True
         now = time.time()
@@ -495,7 +497,7 @@ class ImageGenerationPlugin(Star):
     async def _fetch_images_from_event(
         self, event: AstrMessageEvent
     ) -> list[tuple[bytes, str]]:
-        """从消息事件中提取图片（包括直接发送的图片、引用消息中的图片、被@用户的头像）"""
+        """从消息事件中提取图片（包括直接发送的图片、引用消息中的图片、被@用户的头像）。"""
         images_data: list[tuple[bytes, str]] = []
 
         if not event.message_obj.message:
@@ -547,15 +549,17 @@ class ImageGenerationPlugin(Star):
     async def _get_reference_images_for_command(
         self, event: AstrMessageEvent
     ) -> list[tuple[bytes, str]]:
+        """为指令获取参考图。"""
         return await self._fetch_images_from_event(event)
 
     async def _get_reference_images_for_tool(
         self, event: AstrMessageEvent
     ) -> list[tuple[bytes, str]]:
+        """为工具调用获取参考图。"""
         return await self._fetch_images_from_event(event)
 
     def create_background_task(self, coro: Coroutine[Any, Any, Any]) -> asyncio.Task:
-        """创建后台任务并添加到集合中，防止被 GC"""
+        """创建后台任务并添加到集合中，防止被 GC。"""
         task = asyncio.create_task(coro)
         self.background_tasks.add(task)
         task.add_done_callback(self.background_tasks.discard)
@@ -563,7 +567,7 @@ class ImageGenerationPlugin(Star):
 
     @staticmethod
     async def get_avatar(user_id: str) -> bytes | None:
-        """获取用户头像"""
+        """获取用户头像。"""
         url = f"https://q4.qlogo.cn/headimg_dl?dst_uin={user_id}&spec=640"
         try:
             path = await download_image_by_url(url)
@@ -575,7 +579,7 @@ class ImageGenerationPlugin(Star):
         return None
 
     async def _download_image(self, url: str) -> tuple[bytes, str] | None:
-        """下载图片并返回二进制数据和 MIME 类型"""
+        """下载图片并返回二进制数据和 MIME 类型。"""
         try:
             data: bytes | None = None
             if os.path.exists(url) and os.path.isfile(url):
@@ -617,7 +621,7 @@ class ImageGenerationPlugin(Star):
         resolution: str = "1K",
         task_id: str | None = None,
     ) -> None:
-        """异步生成图片并发送"""
+        """异步生成图片并发送。"""
         if not self.generator:
             return
 
@@ -657,7 +661,7 @@ class ImageGenerationPlugin(Star):
         resolution: str | None,
         task_id: str,
     ) -> None:
-        """执行生成逻辑并发送结果"""
+        """执行生成逻辑并发送结果。"""
         result = await self.generator.generate(
             GenerationRequest(
                 prompt=prompt,
@@ -689,7 +693,7 @@ class ImageGenerationPlugin(Star):
         await self.context.send_message(unified_msg_origin, chain)
 
     async def terminate(self):
-        """插件卸载时清理资源"""
+        """插件卸载时清理资源。"""
         try:
             if self.generator:
                 await self.generator.close()

@@ -36,7 +36,7 @@ ALLOWED_RESOLUTIONS = {"1K", "2K", "4K"}
 
 
 def detect_mime_type(data: bytes) -> str:
-    """Best-effort MIME detection from magic numbers."""
+    """根据魔数（Magic Numbers）尽力检测 MIME 类型。"""
 
     if data.startswith(b"\xff\xd8"):
         return "image/jpeg"
@@ -56,7 +56,7 @@ def detect_mime_type(data: bytes) -> str:
 
 
 def _sync_convert_image_format(image_data: bytes, mime_type: str) -> ImageData:
-    """Convert unsupported images to JPEG synchronously."""
+    """同步将不支持的图像转换为 JPEG。"""
 
     try:
         img = Image.open(BytesIO(image_data))
@@ -72,32 +72,32 @@ def _sync_convert_image_format(image_data: bytes, mime_type: str) -> ImageData:
 
         output = BytesIO()
         img.save(output, format="JPEG", quality=95)
-        logger.debug("[ImageGen] Converted image to JPEG")
+        logger.debug("[ImageGen] 已将图像转换为 JPEG")
         return ImageData(data=output.getvalue(), mime_type="image/jpeg")
     except Exception as exc:  # noqa: BLE001
-        logger.error(f"[ImageGen] Failed to convert image: {exc}")
+        logger.error(f"[ImageGen] 图像转换失败: {exc}")
         return ImageData(data=image_data, mime_type=mime_type)
 
 
 async def convert_image_format(image_data: bytes, mime_type: str) -> ImageData:
-    """Convert an image if its MIME type is unsupported."""
+    """如果 MIME 类型不支持，则转换图像。"""
 
     real_mime = detect_mime_type(image_data)
     if real_mime in SUPPORTED_IMAGE_FORMATS:
         return ImageData(data=image_data, mime_type=real_mime)
-    logger.info(f"[ImageGen] Converting image format: {mime_type} -> image/jpeg")
+    logger.info(f"[ImageGen] 正在转换图像格式: {mime_type} -> image/jpeg")
     return await asyncio.to_thread(_sync_convert_image_format, image_data, mime_type)
 
 
 async def convert_images_batch(images: Iterable[ImageData]) -> list[ImageData]:
-    """Convert a batch of images in parallel."""
+    """并行批量转换图像。"""
 
     tasks = [convert_image_format(img.data, img.mime_type) for img in images]
     return await asyncio.gather(*tasks)
 
 
 def validate_aspect_ratio(value: str | None) -> str | None:
-    """Validate aspect ratio from the allowed set."""
+    """验证宽高比是否在允许的集合中。"""
 
     if value is None:
         return None
@@ -105,7 +105,7 @@ def validate_aspect_ratio(value: str | None) -> str | None:
 
 
 def validate_resolution(value: str | None) -> str | None:
-    """Validate resolution from the allowed set."""
+    """验证分辨率是否在允许的集合中。"""
 
     if value is None:
         return None

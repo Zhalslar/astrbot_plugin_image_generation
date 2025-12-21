@@ -8,9 +8,10 @@ from .gemini_openai_adapter import GeminiOpenAIAdapter
 
 
 class GeminiZaiAdapter(GeminiOpenAIAdapter):
-    """Zai-flavored OpenAI adapter with additional params."""
+    """带有额外参数的 Zai 风格 OpenAI 适配器。"""
 
     def _build_payload(self, request: GenerationRequest) -> dict[str, Any]:
+        """构建请求载荷。"""
         message_content: list[dict] = [{"type": "text", "text": request.prompt}]
 
         for image in request.images:
