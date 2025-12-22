@@ -261,9 +261,14 @@ class ImageGenerationPlugin(Star):
 
         available_models = adapter_cfg.get("available_models") or []
 
-        model = adapter_cfg.get("model") or (
+        model_raw = adapter_cfg.get("model") or (
             available_models[0] if available_models else ""
         )
+
+        # 解析模型设置，支持 adapter/model 格式
+        parsed_adapter_type, model = self._parse_model_setting(model_raw)
+        if parsed_adapter_type:
+            adapter_type = parsed_adapter_type
 
         self.adapter_config = AdapterConfig(
             type=adapter_type,
@@ -452,22 +457,47 @@ class ImageGenerationPlugin(Star):
         if not model_index:
             lines = ["📋 可用模型列表:"]
             for idx, model in enumerate(models, 1):
-                marker = " ✓" if model == self.adapter_config.model else ""
+                # 检查是否匹配当前配置
+                at, m = self._parse_model_setting(model)
+                is_current = False
+                if at:
+                    is_current = (
+                        at == self.adapter_config.type
+                        and m == self.adapter_config.model
+                    )
+                else:
+                    is_current = model == self.adapter_config.model
+
+                marker = " ✓" if is_current else ""
                 lines.append(f"{idx}. {model}{marker}")
-            lines.append(f"\n当前使用: {self.adapter_config.model}")
+            lines.append(
+                f"\n当前使用: {self.adapter_config.model} ({self.adapter_config.type.value})"
+            )
             yield event.plain_result("\n".join(lines))
             return
 
         try:
             index = int(model_index) - 1
             if 0 <= index < len(models):
-                new_model = models[index]
-                self.adapter_config.model = new_model
+                raw_model = models[index]
+
+                adapter_type, model_name = self._parse_model_setting(raw_model)
+
+                if adapter_type:
+                    self.adapter_config.type = adapter_type
+                    self.config.setdefault("adapter", {})["type"] = adapter_type.value
+
+                self.adapter_config.model = model_name
+                self.config.setdefault("adapter", {})["model"] = model_name
+
                 if self.generator:
-                    self.generator.update_model(new_model)
-                self.config.setdefault("adapter", {})["model"] = new_model
+                    if adapter_type:
+                        self.generator.update_adapter(self.adapter_config)
+                    else:
+                        self.generator.update_model(model_name)
+
                 self.config.save_config()
-                yield event.plain_result(f"✅ 模型已切换: {new_model}")
+                yield event.plain_result(f"✅ 模型已切换: {raw_model}")
             else:
                 yield event.plain_result("❌ 无效的序号")
         except ValueError:
@@ -520,6 +550,22 @@ class ImageGenerationPlugin(Star):
                 yield event.plain_result(f"❌ 预设不存在: {name}")
 
     # ----------------------------- 辅助方法 ---------------------------
+    def _parse_model_setting(self, model_str: str) -> tuple[AdapterType | None, str]:
+        """解析模型设置字符串，支持 'adapter/model' 格式。"""
+        if "/" in model_str:
+            adapter_part, model_part = model_str.split("/", 1)
+            adapter_part = adapter_part.strip().lower()
+            # 尝试匹配 AdapterType
+            for at in AdapterType:
+                if at.value.lower() == adapter_part:
+                    return at, model_part.strip()
+            # 如果没匹配到，可能用户写的是 enum name 或者其他
+            try:
+                return AdapterType(adapter_part), model_part.strip()
+            except ValueError:
+                pass
+        return None, model_str
+
     def _check_rate_limit(self, user_id: str) -> bool:
         """检查用户请求频率限制。"""
         if self.rate_limit_seconds <= 0:

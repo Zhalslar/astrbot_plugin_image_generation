@@ -70,6 +70,11 @@ class ImageGenerator:
         if self.adapter:
             self.adapter.update_model(model)
 
+    def update_adapter(self, adapter_config: AdapterConfig) -> None:
+        """更新适配器配置并重新创建适配器。"""
+        self.adapter_config = adapter_config
+        self.adapter = self._create_adapter(adapter_config)
+
     async def close(self) -> None:
         """关闭适配器。"""
         if self.adapter:
