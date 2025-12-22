@@ -6,6 +6,7 @@ from ..adapter import (
     GeminiAdapter,
     GeminiOpenAIAdapter,
     GeminiZaiAdapter,
+    Jimeng2APIAdapter,
     OpenAIAdapter,
     ZImageAdapter,
 )
@@ -34,6 +35,7 @@ class ImageGenerator:
             AdapterType.GEMINI_ZAI: GeminiZaiAdapter,
             AdapterType.OPENAI: OpenAIAdapter,
             AdapterType.Z_IMAGE: ZImageAdapter,
+            AdapterType.JIMENG2API: Jimeng2APIAdapter,
         }
 
         adapter_cls = adapter_map.get(config.type)

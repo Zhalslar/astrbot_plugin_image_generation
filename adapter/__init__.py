@@ -6,6 +6,7 @@ Adapter module for image generation plugin
 from .gemini_adapter import GeminiAdapter
 from .gemini_openai_adapter import GeminiOpenAIAdapter
 from .gemini_zai_adapter import GeminiZaiAdapter
+from .jimeng2api_adapter import Jimeng2APIAdapter
 from .openai_adapter import OpenAIAdapter
 from .z_image_adapter import ZImageAdapter
 
@@ -14,5 +15,6 @@ __all__ = [
     "GeminiOpenAIAdapter",
     "GeminiZaiAdapter",
     "OpenAIAdapter",
-    "ZImageAdapter"
+    "ZImageAdapter",
+    "Jimeng2APIAdapter",
 ]

@@ -231,7 +231,9 @@ class ImageGenerationPlugin(Star):
         if not (capabilities & ImageCapability.IMAGE_TO_IMAGE):
             if "avatar_references" in props:
                 del props["avatar_references"]
-                logger.debug("[ImageGen] 适配器不支持参考图，已从工具参数中移除头像引用")
+                logger.debug(
+                    "[ImageGen] 适配器不支持参考图，已从工具参数中移除头像引用"
+                )
 
     # ---------------------------- 配置加载 -----------------------------
     def _load_config(self) -> None:
@@ -718,11 +720,15 @@ class ImageGenerationPlugin(Star):
             images_data = None
 
         if not (capabilities & ImageCapability.ASPECT_RATIO) and aspect_ratio != "自动":
-            logger.info(f"[ImageGen] 当前适配器不支持指定比例，已忽略参数: {aspect_ratio}")
+            logger.info(
+                f"[ImageGen] 当前适配器不支持指定比例，已忽略参数: {aspect_ratio}"
+            )
             aspect_ratio = "自动"
 
         if not (capabilities & ImageCapability.RESOLUTION) and resolution != "1K":
-            logger.info(f"[ImageGen] 当前适配器不支持指定分辨率，已忽略参数: {resolution}")
+            logger.info(
+                f"[ImageGen] 当前适配器不支持指定分辨率，已忽略参数: {resolution}"
+            )
             resolution = "1K"
 
         if not task_id:

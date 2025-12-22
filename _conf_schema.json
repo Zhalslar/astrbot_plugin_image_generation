@@ -20,7 +20,8 @@
           "gemini(OpenAI)",
           "gemini(Zai)",
           "openai",
-          "z-image(gitee)"
+          "z-image(gitee)",
+          "jimeng2api"
         ]
       },
       "provider_id": {

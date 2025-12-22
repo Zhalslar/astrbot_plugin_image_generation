@@ -27,7 +27,9 @@ class ZImageAdapter(BaseImageAdapter):
             return GenerationResult(images=None, error="未配置 API Key")
 
         if request.images:
-            return GenerationResult(images=None, error="Z-Image 适配器目前仅支持文生图，请勿上传图片。")
+            return GenerationResult(
+                images=None, error="Z-Image 适配器目前仅支持文生图，请勿上传图片。"
+            )
 
         logger.info(
             f"[ImageGen] Z-Image 开始生成: prompt='{request.prompt[:50]}...', model='{self.model or 'z-image-turbo'}'"

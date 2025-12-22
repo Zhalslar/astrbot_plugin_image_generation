@@ -3,12 +3,21 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from ..core.types import GenerationRequest
+from ..core.types import GenerationRequest, ImageCapability
 from .gemini_openai_adapter import GeminiOpenAIAdapter
 
 
 class GeminiZaiAdapter(GeminiOpenAIAdapter):
     """带有额外参数的 Zai 风格 OpenAI 适配器。"""
+
+    def get_capabilities(self) -> ImageCapability:
+        """获取适配器支持的功能。"""
+        return (
+            ImageCapability.TEXT_TO_IMAGE
+            | ImageCapability.IMAGE_TO_IMAGE
+            | ImageCapability.ASPECT_RATIO
+            | ImageCapability.RESOLUTION
+        )
 
     def _build_payload(self, request: GenerationRequest) -> dict[str, Any]:
         """构建请求载荷。"""

@@ -37,13 +37,14 @@
 
 ### 适配器支持状态
 
-| 适配器类型       | 文生图 | 图生图 | 分辨率 | 宽高比 | 说明                          |
-| :--------------- | :----: | :----: | :----: | :----: | :---------------------------- |
-| `gemini`         |   ✅    |   ✅    |   ✅    |   ✅    | Gemini 原生 API               |
-| `gemini(OpenAI)` |   ✅    |   ✅    |   ❌    |   ❌    | OpenAI 兼容格式的 Gemini 接口 |
-| `gemini(Zai)`    |   ✅    |   ✅    |   ✅    |   ✅    | Zai 风格的 Gemini 接口        |
-| `openai`         |   ✅    |   ❌    |   ❌    |   ✅    | OpenAI DALL-E 3               |
-| `z-image(gitee)` |   ✅    |   ❌    |   ✅    |   ✅    | Gitee AI (z-image-turbo)      |
+| 适配器类型       | 文生图 | 图生图 | 分辨率 | 宽高比 | 说明                                                                  |
+| :--------------- | :----: | :----: | :----: | :----: | :-------------------------------------------------------------------- |
+| `gemini`         |   ✅    |   ✅    |   ✅    |   ✅    | Gemini 原生 API                                                       |
+| `gemini(OpenAI)` |   ✅    |   ✅    |   ❌    |   ❌    | OpenAI 兼容格式的 Gemini 接口                                         |
+| `gemini(Zai)`    |   ✅    |   ✅    |   ✅    |   ✅    | Zai 风格的 Gemini 接口                                                |
+| `openai`         |   ✅    |   ❌    |   ❌    |   ✅    | OpenAI DALL-E 3                                                       |
+| `z-image(gitee)` |   ✅    |   ❌    |   ✅    |   ✅    | Gitee AI (z-image-turbo)                                              |
+| `jimeng2api`     |   ✅    |   ✅    |   ✅    |   ✅    | 适用于[iptag/jimeng-api](https://github.com/iptag/jimeng-api)的适配器 |
 
 
 ### 配置项

@@ -12,6 +12,7 @@ class AdapterType(str, enum.Enum):
     GEMINI_ZAI = "gemini(Zai)"
     OPENAI = "openai"
     Z_IMAGE = "z-image(gitee)"
+    JIMENG2API = "jimeng2api"
 
 
 class ImageCapability(enum.Flag):
