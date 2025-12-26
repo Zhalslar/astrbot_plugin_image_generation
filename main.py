@@ -45,21 +45,35 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
             "properties": {
                 "prompt": {
                     "type": "string",
-                    "description": "生图时使用的提示词(直接将用户发送的内容原样传递给模型)",
+                    "description": "生图时使用的提示词(要将用户的意图原样传达给模型)。如果用户提到了画图但没有具体描述，请根据上下文推断或提示用户描述。",
                 },
                 "aspect_ratio": {
                     "type": "string",
-                    "description": "图片宽高比",
-                    "enum": [],  # 占位符，稍后会被替换
+                    "description": "图片宽高比。如果不确定，请使用'自动'。",
+                    "enum": [
+                        "自动",
+                        "1:1",
+                        "2:3",
+                        "3:2",
+                        "3:4",
+                        "4:3",
+                        "4:5",
+                        "5:4",
+                        "9:16",
+                        "16:9",
+                        "21:9",
+                    ],
+                    "default": "自动",
                 },
                 "resolution": {
                     "type": "string",
-                    "description": "图片分辨率",
+                    "description": "图片质量/分辨率。默认使用 '1K'。",
                     "enum": ["1K", "2K", "4K"],
+                    "default": "1K",
                 },
                 "avatar_references": {
                     "type": "array",
-                    "description": "需要作为参考的用户头像列表。支持: 'self'(机器人头像)、'sender'(发送者头像)、或具体的QQ号",
+                    "description": "当需要使用某人的头像时使用。'self'表示机器人，'sender'表示发送者，也可以直接使用ID做参数。",
                     "items": {"type": "string"},
                 },
             },
@@ -69,34 +83,26 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
 
     plugin: object | None = None
 
-    def __post_init_post_parse__(self):
-        """初始化后处理，动态补齐宽高比枚举。"""
-        # 初始化时动态补齐宽高比枚举，避免写死在默认 schema 中
-        self.parameters["properties"]["aspect_ratio"]["enum"] = [
-            "自动",
-            "1:1",
-            "2:3",
-            "3:2",
-            "3:4",
-            "4:3",
-            "4:5",
-            "5:4",
-            "9:16",
-            "16:9",
-            "21:9",
-        ]
-
     async def call(
         self, context: ContextWrapper[AstrAgentContext], **kwargs: Any
     ) -> ToolExecResult:
         """执行工具调用。"""
         # 获取提示词
-        if not (prompt := kwargs.get("prompt", "")):
-            return "请提供图片生成的提示词"
+        prompt = kwargs.get("prompt", "").strip()
+        if not prompt:
+            return ToolExecResult(
+                summary="未提供提示词",
+                success=False,
+                error="请提供图片生成的提示词"
+            )
 
         plugin = self.plugin
         if not plugin:
-            return "❌ 插件未正确初始化 (Plugin instance missing)"
+            return ToolExecResult(
+                summary="插件实例缺失",
+                success=False,
+                error="❌ 插件未正确初始化 (Plugin instance missing)"
+            )
 
         # 获取事件上下文
         event = None
@@ -111,17 +117,29 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
             logger.warning(
                 f"[ImageGen] 工具调用上下文缺少事件。上下文类型: {type(context)}"
             )
-            return "❌ 无法获取当前消息上下文"
+            return ToolExecResult(
+                summary="无法获取上下文",
+                success=False,
+                error="❌ 无法获取当前消息上下文"
+            )
 
         # 检查频率限制和每日限制
         check_result = plugin._check_rate_limit(event.unified_msg_origin)
         if isinstance(check_result, str):
             logger.warning(f"[ImageGen] 工具调用触发限制: {check_result} (用户: {event.unified_msg_origin})")
-            return check_result
+            return ToolExecResult(
+                summary="触发限制",
+                success=False,
+                error=check_result
+            )
 
-        if not plugin.adapter_config.api_keys:
+        if not plugin.adapter_config or not plugin.adapter_config.api_keys:
             logger.warning(f"[ImageGen] 工具调用失败: 未配置 API Key (用户: {event.unified_msg_origin})")
-            return "❌ 未配置 API Key，无法生成图片"
+            return ToolExecResult(
+                summary="配置缺失",
+                success=False,
+                error="❌ 未配置 API Key，无法生成图片"
+            )
 
         # 工具调用同样支持获取上下文参考图（消息/引用/头像）
         images_data = []
@@ -131,28 +149,35 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
             else ImageCapability.NONE
         )
 
-        if capabilities & ImageCapability.IMAGE_TO_IMAGE:
-            images_data = await plugin._get_reference_images_for_tool(event)
+        try:
+            if capabilities & ImageCapability.IMAGE_TO_IMAGE:
+                images_data = await plugin._get_reference_images_for_tool(event)
 
-            # 处理头像引用参数
-            avatar_refs = kwargs.get("avatar_references", [])
-            if avatar_refs and isinstance(avatar_refs, list):
-                for ref in avatar_refs:
-                    if not isinstance(ref, str):
-                        continue
-                    ref = ref.strip().lower()
-                    user_id = None
-                    if ref == "self":
-                        user_id = str(event.get_self_id())
-                    elif ref == "sender":
-                        user_id = str(event.get_sender_id() or event.unified_msg_origin)
-                    else:
-                        user_id = ref
-                    if user_id:
-                        avatar_data = await plugin.get_avatar(user_id)
-                        if avatar_data:
-                            images_data.append((avatar_data, "image/jpeg"))
-                            logger.info(f"[ImageGen] 已添加 {user_id} 的头像作为参考图")
+                # 处理头像引用参数
+                avatar_refs = kwargs.get("avatar_references", [])
+                if avatar_refs and isinstance(avatar_refs, list):
+                    for ref in avatar_refs:
+                        if not isinstance(ref, str):
+                            continue
+                        ref = ref.strip().lower()
+                        user_id = None
+                        if ref == "self":
+                            user_id = str(event.get_self_id())
+                        elif ref == "sender":
+                            user_id = str(event.get_sender_id() or event.unified_msg_origin)
+                        else:
+                            # 简单的 QQ 号校验（可选）
+                            if ref.isdigit():
+                                user_id = ref
+
+                        if user_id:
+                            avatar_data = await plugin.get_avatar(user_id)
+                            if avatar_data:
+                                images_data.append((avatar_data, "image/jpeg"))
+                                logger.info(f"[ImageGen] 已添加 {user_id} 的头像作为参考图")
+        except Exception as e:
+            logger.error(f"[ImageGen] 处理参考图失败: {e}", exc_info=True)
+            # 参考图处理失败不影响文生图流程，记录日志继续执行
 
         # 生成任务 ID
         task_id = hashlib.md5(
@@ -172,7 +197,11 @@ class ImageGenerationTool(FunctionTool[AstrAgentContext]):
         )
 
         mode = "图生图" if images_data else "文生图"
-        return f"已启动{mode}任务"
+        return ToolExecResult(
+            summary=f"已启动{mode}任务",
+            success=True,
+            data={"task_id": task_id, "mode": mode}
+        )
 
 
 class ImageGenerationPlugin(Star):
@@ -402,12 +431,15 @@ class ImageGenerationPlugin(Star):
         current_model = ""
 
         if "/" in model_setting:
-            target_provider_name, target_model = model_setting.split("/", 1)
-            for cfg in all_provider_configs:
-                if cfg.name == target_provider_name:
-                    matched_config = cfg
-                    current_model = target_model
-                    break
+            try:
+                target_provider_name, target_model = model_setting.split("/", 1)
+                for cfg in all_provider_configs:
+                    if cfg.name == target_provider_name:
+                        matched_config = cfg
+                        current_model = target_model
+                        break
+            except ValueError:
+                logger.warning(f"[ImageGen] 模型设置格式错误: {model_setting}，期望格式为 '供应商/模型'")
 
         # 如果没匹配到（或者没设置），取第一个可用的
         if not matched_config and all_provider_configs:
@@ -432,6 +464,7 @@ class ImageGenerationPlugin(Star):
             self.adapter_config.available_models = all_available_models
         else:
             self.adapter_config = None
+            logger.error("[ImageGen] 未找到任何有效的生图模型配置")
 
         self.rate_limit_seconds = max(0, user_limits_cfg.get("rate_limit_seconds", 0))
         self.max_concurrent_tasks = max(1, gen_cfg.get("max_concurrent_tasks", 3))
@@ -448,6 +481,10 @@ class ImageGenerationPlugin(Star):
         self.default_resolution = gen_cfg.get("default_resolution", "1K")
         self.show_generation_info = gen_cfg.get("show_generation_info", False)
         self.show_model_info = gen_cfg.get("show_model_info", False)
+
+        # 重新初始化信号量以应用新并发数
+        if self.max_concurrent_tasks:
+            self.semaphore = asyncio.Semaphore(self.max_concurrent_tasks)
 
         self.presets = self._load_presets(self.config.get("presets", []))
 
@@ -720,7 +757,7 @@ class ImageGenerationPlugin(Star):
         """从消息事件中提取图片（包括直接发送的图片、引用消息中的图片、被@用户的头像）。"""
         images_data: list[tuple[bytes, str]] = []
 
-        if not event.message_obj.message:
+        if not event.message_obj or not event.message_obj.message:
             return images_data
 
         # 预扫描：记录引用消息的发送者以及各个 @ 出现次数，用于过滤自动 @
@@ -732,38 +769,42 @@ class ImageGenerationPlugin(Star):
                 if hasattr(component, "sender_id") and component.sender_id:
                     reply_sender_id = str(component.sender_id)
             elif isinstance(component, Comp.At):
-                if component.qq != "all":
+                if hasattr(component, "qq") and component.qq != "all":
                     uid = str(component.qq)
                     at_counts[uid] = at_counts.get(uid, 0) + 1
 
         for component in event.message_obj.message:
-            if isinstance(component, Comp.Image):
-                # 处理直接发送的图片
-                url = component.url or component.file
-                if url and (data := await self._download_image(url)):
-                    images_data.append(data)
-            elif isinstance(component, Comp.Reply):
-                # 处理引用消息中的图片
-                if component.chain:
-                    for sub_comp in component.chain:
-                        if isinstance(sub_comp, Comp.Image):
-                            url = sub_comp.url or sub_comp.file
-                            if url and (data := await self._download_image(url)):
-                                images_data.append(data)
-            elif isinstance(component, Comp.At):
-                # 处理 @ 用户的头像
-                if component.qq != "all":
-                    uid = str(component.qq)
-                    # 引用消息带来的单次自动 @ 默认忽略头像，除非用户再次显式 @
-                    if reply_sender_id and uid == reply_sender_id:
-                        if at_counts.get(uid, 0) == 1:
+            try:
+                if isinstance(component, Comp.Image):
+                    # 处理直接发送的图片
+                    url = component.url or component.file
+                    if url and (data := await self._download_image(url)):
+                        images_data.append(data)
+                elif isinstance(component, Comp.Reply):
+                    # 处理引用消息中的图片
+                    if component.chain:
+                        for sub_comp in component.chain:
+                            if isinstance(sub_comp, Comp.Image):
+                                url = sub_comp.url or sub_comp.file
+                                if url and (data := await self._download_image(url)):
+                                    images_data.append(data)
+                elif isinstance(component, Comp.At):
+                    # 处理 @ 用户的头像
+                    if hasattr(component, "qq") and component.qq != "all":
+                        uid = str(component.qq)
+                        # 引用消息带来的单次自动 @ 默认忽略头像，除非用户再次显式 @
+                        if reply_sender_id and uid == reply_sender_id:
+                            if at_counts.get(uid, 0) == 1:
+                                continue
+                        self_id = str(event.get_self_id()).strip()
+                        # 机器人单次被 @ 多为触发前缀，默认不取机器人头像
+                        if self_id and uid == self_id and at_counts.get(uid, 0) == 1:
                             continue
-                    self_id = str(event.get_self_id()).strip()
-                    # 机器人单次被 @ 多为触发前缀，默认不取机器人头像
-                    if self_id and uid == self_id and at_counts.get(uid, 0) == 1:
-                        continue
-                    if avatar_data := await self.get_avatar(uid):
-                        images_data.append((avatar_data, "image/jpeg"))
+                        if avatar_data := await self.get_avatar(uid):
+                            images_data.append((avatar_data, "image/jpeg"))
+            except Exception as e:
+                logger.error(f"[ImageGen] 提取消息组件图片失败: {e}")
+                continue
         return images_data
 
     async def _get_reference_images_for_command(
