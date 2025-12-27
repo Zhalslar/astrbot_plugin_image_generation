@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import time
+from typing import Any
 
 from astrbot.api import logger
 
@@ -186,3 +187,39 @@ class Jimeng2APIAdapter(BaseImageAdapter):
             return None, "未找到有效的图片数据"
 
         return images, None
+
+    async def receive_token(self) -> dict[str, Any]:
+        """为所有 API Key 自动领取积分。"""
+        results = {}
+        if not self.api_keys:
+            return {"error": "未配置 API Key"}
+
+        base_url = self.base_url or "http://localhost:5100"
+        url = f"{base_url.rstrip('/')}/token/receive"
+
+        for i, key in enumerate(self.api_keys):
+            headers = {
+                "Authorization": f"Bearer {key}",
+            }
+            try:
+                async with self._get_session().post(
+                    url,
+                    headers=headers,
+                    proxy=self.proxy,
+                    timeout=30,
+                ) as resp:
+                    resp_json = await resp.json()
+                    status_code = resp.status
+                    results[f"key_{i}"] = {
+                        "status": status_code,
+                        "data": resp_json
+                    }
+                    if status_code == 200:
+                        logger.info(f"{self._get_log_prefix()} API Key (索引 {i}) 积分领取成功: {resp_json}")
+                    else:
+                        logger.warning(f"{self._get_log_prefix()} API Key (索引 {i}) 积分领取失败 ({status_code}): {resp_json}")
+            except Exception as e:
+                logger.error(f"{self._get_log_prefix()} API Key (索引 {i}) 积分领取请求异常: {e}")
+                results[f"key_{i}"] = {"error": str(e)}
+
+        return results

@@ -23,6 +23,7 @@ from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.utils.io import download_image_by_url
 
 from .core.generator import ImageGenerator
+from .core.task_manager import TaskManager
 from .core.types import (
     AdapterConfig,
     AdapterType,
@@ -214,11 +215,10 @@ class ImageGenerationPlugin(Star):
 
         self.adapter_config: AdapterConfig | None = None
         self.generator: ImageGenerator | None = None
+        self.task_manager = TaskManager()
 
         # 用于频率限制
         self.user_request_timestamps: dict[str, float] = {}
-        # 后台任务集合
-        self.background_tasks: set[asyncio.Task] = set()
         # 并发控制信号量
         self.semaphore: asyncio.Semaphore | None = None
 
@@ -255,8 +255,8 @@ class ImageGenerationPlugin(Star):
             self.context.add_llm_tools(tool)
             logger.info("[ImageGen] 已注册图像生成工具")
 
-        # 启动定时清理任务
-        self.create_background_task(self._cache_cleanup_loop())
+        # 启动定时任务
+        self._setup_tasks()
 
         logger.info(
             f"[ImageGen] 插件加载完成，模型: {self.adapter_config.model if self.adapter_config else '未知'}"
@@ -265,6 +265,33 @@ class ImageGenerationPlugin(Star):
     def _ensure_dirs(self):
         """确保数据和缓存目录存在。"""
         os.makedirs(self.cache_dir, exist_ok=True)
+
+    def _setup_tasks(self):
+        """配置并启动定时任务。"""
+        # 1. 缓存清理任务
+        self.task_manager.start_loop_task(
+            name="cache_cleanup",
+            coro_func=self._cleanup_cache,
+            interval_seconds=self.cleanup_interval_hours * 3600,
+            run_immediately=True
+        )
+
+        # 2. Jimeng2API 自动领积分任务
+        self._setup_jimeng_token_task()
+
+    def _setup_jimeng_token_task(self):
+        """配置即梦 2 自动领积分任务。"""
+        from .adapter.jimeng2api_adapter import Jimeng2APIAdapter
+
+        if self.generator and isinstance(self.generator.adapter, Jimeng2APIAdapter):
+            # 每 12 小时执行一次
+            self.task_manager.start_loop_task(
+                name="jimeng_token_receive",
+                coro_func=self.generator.adapter.receive_token,
+                interval_seconds=12 * 3600,
+                run_immediately=True
+            )
+            logger.info("[ImageGen] 已启动即梦 2 自动领积分任务")
 
     def _load_usage_data(self):
         """加载用户使用数据。"""
@@ -299,17 +326,6 @@ class ImageGenerationPlugin(Star):
                 json.dump(self.usage_data, f, ensure_ascii=False, indent=2)
         except Exception as exc:
             logger.error(f"[ImageGen] 保存使用数据失败: {exc}")
-
-    async def _cache_cleanup_loop(self):
-        """定时清理缓存的任务。"""
-        while True:
-            try:
-                await self._cleanup_cache()
-            except Exception as exc:
-                logger.error(f"[ImageGen] 清理缓存出错: {exc}")
-
-            # 等待指定的间隔时间
-            await asyncio.sleep(self.cleanup_interval_hours * 3600)
 
     async def _cleanup_cache(self):
         """执行缓存清理。"""
@@ -820,11 +836,8 @@ class ImageGenerationPlugin(Star):
         return await self._fetch_images_from_event(event)
 
     def create_background_task(self, coro: Coroutine[Any, Any, Any]) -> asyncio.Task:
-        """创建后台任务并添加到集合中，防止被 GC。"""
-        task = asyncio.create_task(coro)
-        self.background_tasks.add(task)
-        task.add_done_callback(self.background_tasks.discard)
-        return task
+        """创建后台任务并添加到管理器中。"""
+        return self.task_manager.create_task(coro)
 
     async def get_avatar(self, user_id: str) -> bytes | None:
         """获取用户头像。"""
@@ -1027,9 +1040,7 @@ class ImageGenerationPlugin(Star):
         try:
             if self.generator:
                 await self.generator.close()
-            for task in list(self.background_tasks):
-                if not task.done():
-                    task.cancel()
+            await self.task_manager.cancel_all()
             logger.info("[ImageGen] 插件已卸载")
         except Exception as exc:
             logger.error(f"[ImageGen] 卸载清理出错: {exc}")
