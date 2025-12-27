@@ -112,6 +112,7 @@ class Jimeng2APIAdapter(BaseImageAdapter):
                         return None, f"API 错误 ({resp.status})"
 
                     data_json = await resp.json()
+                    logger.debug(f"{prefix} Compositions 响应: {data_json}")
                     logger.info(
                         f"{prefix} Compositions 成功 (耗时: {duration:.2f}s)"
                     )
@@ -150,6 +151,7 @@ class Jimeng2APIAdapter(BaseImageAdapter):
                         return None, f"API 错误 ({resp.status})"
 
                     data_json = await resp.json()
+                    logger.debug(f"{prefix} Generations 响应: {data_json}")
                     logger.info(
                         f"{prefix} Generations 成功 (耗时: {duration:.2f}s)"
                     )
@@ -167,11 +169,17 @@ class Jimeng2APIAdapter(BaseImageAdapter):
     ) -> tuple[list[bytes] | None, str | None]:
         """从响应中提取图片数据。"""
         prefix = self._get_log_prefix(task_id)
+        if response is None:
+            return None, "响应为空"
         if "data" not in response:
-            return None, "响应中未找到 data 字段"
+            return None, f"响应中未找到 data 字段: {response}"
+
+        data = response.get("data")
+        if data is None:
+            return None, "data 字段为 None"
 
         images = []
-        for item in response["data"]:
+        for item in data:
             if "b64_json" in item:
                 images.append(base64.b64decode(item["b64_json"]))
             elif "url" in item:

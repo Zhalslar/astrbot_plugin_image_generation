@@ -280,7 +280,7 @@ class ImageGenerationPlugin(Star):
         self._setup_jimeng_token_task()
 
     def _setup_jimeng_token_task(self):
-        """配置即梦 2 自动领积分任务。"""
+        """配置即梦自动领积分任务。"""
         from .adapter.jimeng2api_adapter import Jimeng2APIAdapter
 
         if self.generator and isinstance(self.generator.adapter, Jimeng2APIAdapter):
