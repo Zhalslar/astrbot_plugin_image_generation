@@ -95,7 +95,7 @@ class GeminiAdapter(BaseImageAdapter):
         start_time = time.time()
         url = f"{self.base_url or self.DEFAULT_BASE_URL}/v1beta/models/{self.model}:generateContent"
         api_key = self._get_current_api_key()
-        masked_key = api_key[:4] + "****" + api_key[-4:] if len(api_key) > 8 else "****"
+        masked_key = self._get_masked_api_key()
         prefix = self._get_log_prefix(task_id)
         logger.debug(f"{prefix} 请求 -> {url}, key={masked_key}")
 
@@ -109,7 +109,7 @@ class GeminiAdapter(BaseImageAdapter):
                 url,
                 json=payload,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=self.timeout),
+                timeout=self._get_timeout(),
                 proxy=self.proxy,
             ) as response:
                 duration = time.time() - start_time

@@ -92,7 +92,7 @@ class GeminiOpenAIAdapter(BaseImageAdapter):
         start_time = time.time()
         url = f"{self.base_url or self.DEFAULT_BASE_URL}/v1/chat/completions"
         api_key = self._get_current_api_key()
-        masked_key = api_key[:4] + "****" + api_key[-4:] if len(api_key) > 8 else "****"
+        masked_key = self._get_masked_api_key()
         prefix = self._get_log_prefix(task_id)
         logger.debug(f"{prefix} 请求 -> {url}, key={masked_key}")
 
@@ -106,7 +106,7 @@ class GeminiOpenAIAdapter(BaseImageAdapter):
                 url,
                 json=payload,
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=self.timeout),
+                timeout=self._get_timeout(),
                 proxy=self.proxy,
             ) as response:
                 duration = time.time() - start_time
@@ -137,7 +137,7 @@ class GeminiOpenAIAdapter(BaseImageAdapter):
         prefix = self._get_log_prefix(task_id)
         try:
             session = self._get_session()
-            async with session.get(url, timeout=30) as response:
+            async with session.get(url, timeout=self._get_download_timeout()) as response:
                 if response.status == 200:
                     return await response.read()
                 logger.error(f"{prefix} 下载图像失败: {response.status} - {url}")

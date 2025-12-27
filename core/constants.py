@@ -28,6 +28,9 @@ GEMINI_SAFETY_CATEGORIES = (
 DEFAULT_TIMEOUT = 180
 """默认请求超时时间（秒）。"""
 
+DEFAULT_DOWNLOAD_TIMEOUT = 30
+"""默认图像下载超时时间（秒）。"""
+
 DEFAULT_MAX_RETRY_ATTEMPTS = 3
 """默认最大重试次数。"""
 
@@ -51,6 +54,25 @@ DEFAULT_CLEANUP_INTERVAL_HOURS = 24
 
 DEFAULT_DAILY_LIMIT_COUNT = 10
 """默认每日生成限制次数。"""
+
+DEFAULT_RATE_LIMIT_SECONDS = 0
+"""默认用户请求频率限制（秒），0 表示不限制。"""
+
+# ========================== 脱敏常量 ==========================
+
+MASK_VISIBLE_CHARS = 4
+"""敏感信息脱敏时两端显示的字符数。"""
+
+MASK_MIN_LENGTH = 8
+"""需要脱敏的最小字符串长度。"""
+
+MASK_PLACEHOLDER = "****"
+"""脱敏占位符。"""
+
+# ========================== 数据保留策略 ==========================
+
+USAGE_DATA_RETENTION_DAYS = 7
+"""使用数据保留天数。"""
 
 
 # ========================== 分辨率映射 ==========================

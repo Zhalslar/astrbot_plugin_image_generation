@@ -69,7 +69,7 @@ class ZImageAdapter(BaseImageAdapter):
                 json=payload,
                 headers=headers,
                 proxy=self.proxy,
-                timeout=self.timeout,
+                timeout=self._get_timeout(),
             ) as resp:
                 duration = time.time() - start_time
                 if resp.status != 200:
@@ -150,7 +150,7 @@ class ZImageAdapter(BaseImageAdapter):
         session = self._get_session()
         prefix = self._get_log_prefix(task_id)
         try:
-            async with session.get(url, proxy=self.proxy, timeout=30) as resp:
+            async with session.get(url, proxy=self.proxy, timeout=self._get_download_timeout()) as resp:
                 if resp.status == 200:
                     data = await resp.read()
                     logger.debug(f"{prefix} 图像下载成功: {len(data)} bytes")

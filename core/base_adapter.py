@@ -7,7 +7,9 @@ import aiohttp
 
 from astrbot.api import logger
 
+from .constants import DEFAULT_DOWNLOAD_TIMEOUT
 from .types import AdapterConfig, GenerationRequest, GenerationResult, ImageCapability
+from .utils import mask_sensitive
 
 
 class BaseImageAdapter(abc.ABC):
@@ -21,6 +23,7 @@ class BaseImageAdapter(abc.ABC):
         self.model = config.model
         self.proxy = config.proxy
         self.timeout = config.timeout
+        self.download_timeout = DEFAULT_DOWNLOAD_TIMEOUT
         self.max_retry_attempts = max(1, config.max_retry_attempts)
         self.safety_settings = config.safety_settings
         self._session: aiohttp.ClientSession | None = None
@@ -48,6 +51,10 @@ class BaseImageAdapter(abc.ABC):
             return ""
         return self.api_keys[self.current_key_index % len(self.api_keys)]
 
+    def _get_masked_api_key(self) -> str:
+        """获取脱敏后的当前 API Key，用于日志输出。"""
+        return mask_sensitive(self._get_current_api_key())
+
     def _get_log_prefix(self, task_id: str | None = None) -> str:
         """获取统一的日志前缀。"""
         adapter_name = self.__class__.__name__.replace("Adapter", "")
@@ -55,6 +62,14 @@ class BaseImageAdapter(abc.ABC):
         if task_id:
             prefix += f" [{task_id}]"
         return prefix
+
+    def _get_timeout(self) -> aiohttp.ClientTimeout:
+        """获取统一的请求超时配置。"""
+        return aiohttp.ClientTimeout(total=self.timeout)
+
+    def _get_download_timeout(self) -> aiohttp.ClientTimeout:
+        """获取统一的下载超时配置。"""
+        return aiohttp.ClientTimeout(total=self.download_timeout)
 
     def _rotate_api_key(self) -> None:
         """轮换 API Key。"""

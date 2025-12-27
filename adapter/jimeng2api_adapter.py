@@ -74,7 +74,7 @@ class Jimeng2APIAdapter(BaseImageAdapter):
                     json=payload,
                     headers=headers,
                     proxy=self.proxy,
-                    timeout=self.timeout,
+                    timeout=self._get_timeout(),
                 ) as resp:
                     duration = time.time() - start_time
                     if resp.status != 200:
@@ -111,7 +111,7 @@ class Jimeng2APIAdapter(BaseImageAdapter):
                     json=payload,
                     headers=headers,
                     proxy=self.proxy,
-                    timeout=self.timeout,
+                    timeout=self._get_timeout(),
                 ) as resp:
                     duration = time.time() - start_time
                     if resp.status != 200:
@@ -151,7 +151,7 @@ class Jimeng2APIAdapter(BaseImageAdapter):
                 images.append(base64.b64decode(item["b64_json"]))
             elif "url" in item:
                 async with self._get_session().get(
-                    item["url"], proxy=self.proxy
+                    item["url"], proxy=self.proxy, timeout=self._get_download_timeout()
                 ) as resp:
                     if resp.status == 200:
                         images.append(await resp.read())
@@ -183,7 +183,7 @@ class Jimeng2APIAdapter(BaseImageAdapter):
                     url,
                     headers=headers,
                     proxy=self.proxy,
-                    timeout=30,
+                    timeout=self._get_download_timeout(),
                 ) as resp:
                     resp_json = await resp.json()
                     status_code = resp.status

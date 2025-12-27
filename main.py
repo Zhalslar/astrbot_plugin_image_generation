@@ -22,6 +22,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 from astrbot.core.config.astrbot_config import AstrBotConfig
 from astrbot.core.utils.io import download_image_by_url
 
+from .core.constants import USAGE_DATA_RETENTION_DAYS
 from .core.generator import ImageGenerator
 from .core.task_manager import TaskManager
 from .core.types import (
@@ -31,7 +32,7 @@ from .core.types import (
     ImageCapability,
     ImageData,
 )
-from .core.utils import validate_aspect_ratio, validate_resolution
+from .core.utils import mask_sensitive, validate_aspect_ratio, validate_resolution
 
 
 @pydantic_dataclass
@@ -302,13 +303,13 @@ class ImageGenerationPlugin(Star):
                 with open(self.usage_file, encoding="utf-8") as f:
                     self.usage_data = json.load(f)
 
-                # 清理旧数据，只保留最近 7 天
+                # 清理旧数据，只保留最近 N 天（由 USAGE_DATA_RETENTION_DAYS 控制）
                 today = datetime.date.today()
                 keys_to_delete = []
                 for date_str in self.usage_data:
                     try:
                         date_obj = datetime.date.fromisoformat(date_str)
-                        if (today - date_obj).days > 7:
+                        if (today - date_obj).days > USAGE_DATA_RETENTION_DAYS:
                             keys_to_delete.append(date_str)
                     except ValueError:
                         keys_to_delete.append(date_str)
@@ -574,9 +575,7 @@ class ImageGenerationPlugin(Star):
             yield event.plain_result(check_result)
             return
 
-        masked_uid = (
-            user_id[:4] + "****" + user_id[-4:] if len(user_id) > 8 else user_id
-        )
+        masked_uid = mask_sensitive(user_id)
 
         user_input = (event.message_str or "").strip()
         logger.info(f"[ImageGen] 收到生图指令 - 用户: {masked_uid}, 输入: {user_input}")
@@ -697,7 +696,7 @@ class ImageGenerationPlugin(Star):
                 self._load_config()
 
                 if self.generator:
-                    self.generator.update_adapter(self.adapter_config)
+                    await self.generator.update_adapter(self.adapter_config)
 
                 yield event.plain_result(f"✅ 模型已切换: {raw_model}")
             else:
@@ -709,9 +708,7 @@ class ImageGenerationPlugin(Star):
     async def preset_command(self, event: AstrMessageEvent):
         """管理生图预设。"""
         user_id = event.unified_msg_origin
-        masked_uid = (
-            user_id[:4] + "****" + user_id[-4:] if len(user_id) > 8 else user_id
-        )
+        masked_uid = mask_sensitive(user_id)
         message_str = (event.message_str or "").strip()
         logger.info(
             f"[ImageGen] 收到预设指令 - 用户: {masked_uid}, 内容: {message_str}"

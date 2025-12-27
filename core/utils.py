@@ -8,6 +8,13 @@ from PIL import Image
 
 from astrbot.api import logger
 
+from .constants import (
+    MASK_MIN_LENGTH,
+    MASK_PLACEHOLDER,
+    MASK_VISIBLE_CHARS,
+    SUPPORTED_ASPECT_RATIOS,
+    SUPPORTED_RESOLUTIONS,
+)
 from .types import ImageData
 
 SUPPORTED_IMAGE_FORMATS = {
@@ -18,21 +25,9 @@ SUPPORTED_IMAGE_FORMATS = {
     "image/heif",
 }
 
-ALLOWED_ASPECT_RATIOS = {
-    "1:1",
-    "2:3",
-    "3:2",
-    "3:4",
-    "4:3",
-    "4:5",
-    "5:4",
-    "9:16",
-    "16:9",
-    "21:9",
-    "自动",
-}
-
-ALLOWED_RESOLUTIONS = {"1K", "2K", "4K"}
+# 使用 constants.py 中的定义，转换为 set 以保持向后兼容
+ALLOWED_ASPECT_RATIOS = set(SUPPORTED_ASPECT_RATIOS)
+ALLOWED_RESOLUTIONS = set(SUPPORTED_RESOLUTIONS)
 
 
 def detect_mime_type(data: bytes) -> str:
@@ -110,3 +105,25 @@ def validate_resolution(value: str | None) -> str | None:
     if value is None:
         return None
     return value if value in ALLOWED_RESOLUTIONS else None
+
+
+def mask_sensitive(
+    value: str,
+    visible_chars: int = MASK_VISIBLE_CHARS,
+    min_length: int = MASK_MIN_LENGTH,
+    placeholder: str = MASK_PLACEHOLDER,
+) -> str:
+    """对敏感信息进行脱敏处理。
+
+    Args:
+        value: 需要脱敏的字符串
+        visible_chars: 两端显示的字符数
+        min_length: 需要脱敏的最小长度
+        placeholder: 中间的占位符
+
+    Returns:
+        脱敏后的字符串
+    """
+    if len(value) <= min_length:
+        return placeholder
+    return f"{value[:visible_chars]}{placeholder}{value[-visible_chars:]}"
