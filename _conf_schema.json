@@ -20,13 +20,6 @@
             "type": "string",
             "default": ""
           },
-          "provider_id": {
-            "description": "选择提供商",
-            "hint": "从系统已配置的提供商中选择一个用于图像生成",
-            "type": "string",
-            "default": "",
-            "_special": "select_provider"
-          },
           "base_url": {
             "description": "API Base URL",
             "hint": "仅在未选择系统提供商时需要填写",
@@ -62,13 +55,6 @@
             "hint": "用于区分不同适配器的名称,生图模型格式为 '适配器名称/模型名称'",
             "type": "string",
             "default": ""
-          },
-          "provider_id": {
-            "description": "选择提供商",
-            "hint": "从系统已配置的提供商中选择一个用于图像生成",
-            "type": "string",
-            "default": "",
-            "_special": "select_provider"
           },
           "base_url": {
             "description": "API Base URL",
@@ -106,13 +92,6 @@
             "type": "string",
             "default": ""
           },
-          "provider_id": {
-            "description": "选择提供商",
-            "hint": "从系统已配置的提供商中选择一个用于图像生成",
-            "type": "string",
-            "default": "",
-            "_special": "select_provider"
-          },
           "base_url": {
             "description": "API Base URL",
             "hint": "仅在未选择系统提供商时需要填写",
@@ -149,13 +128,6 @@
             "type": "string",
             "default": ""
           },
-          "provider_id": {
-            "description": "选择提供商",
-            "hint": "从系统已配置的提供商中选择一个用于图像生成",
-            "type": "string",
-            "default": "",
-            "_special": "select_provider"
-          },
           "base_url": {
             "description": "API Base URL",
             "hint": "仅在未选择系统提供商时需要填写",
@@ -191,13 +163,6 @@
             "hint": "用于区分不同适配器的名称,生图模型格式为 '适配器名称/模型名称'",
             "type": "string",
             "default": ""
-          },
-          "provider_id": {
-            "description": "选择提供商",
-            "hint": "从系统已配置的提供商中选择一个用于图像生成",
-            "type": "string",
-            "default": "",
-            "_special": "select_provider"
           },
           "base_url": {
             "description": "API Base URL",

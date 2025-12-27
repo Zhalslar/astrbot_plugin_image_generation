@@ -4,6 +4,13 @@ Core module for image generation plugin
 """
 
 from .base_adapter import BaseImageAdapter
+from .config_manager import (
+    CacheSettings,
+    ConfigManager,
+    GenerationSettings,
+    PluginConfig,
+    UsageSettings,
+)
 from .constants import (
     DEFAULT_ASPECT_RATIO,
     DEFAULT_MAX_RETRY_ATTEMPTS,
@@ -21,6 +28,8 @@ from .constants import (
     SUPPORTED_RESOLUTIONS,
 )
 from .generator import ImageGenerator
+from .image_processor import ImageProcessor
+from .llm_tool import ImageGenerationTool, adjust_tool_parameters
 from .task_manager import TaskManager
 from .types import (
     AdapterConfig,
@@ -31,10 +40,12 @@ from .types import (
     ImageCapability,
     ImageData,
 )
+from .usage_manager import UsageManager
 from .utils import (
     convert_image_format,
     convert_images_batch,
     detect_mime_type,
+    mask_sensitive,
     validate_aspect_ratio,
     validate_resolution,
 )
@@ -44,6 +55,18 @@ __all__ = [
     "BaseImageAdapter",
     "ImageGenerator",
     "TaskManager",
+    # 新增管理器
+    "ConfigManager",
+    "UsageManager",
+    "ImageProcessor",
+    # 配置数据类
+    "PluginConfig",
+    "UsageSettings",
+    "CacheSettings",
+    "GenerationSettings",
+    # LLM 工具
+    "ImageGenerationTool",
+    "adjust_tool_parameters",
     # 数据类型
     "AdapterConfig",
     "AdapterMetadata",
@@ -56,6 +79,7 @@ __all__ = [
     "convert_image_format",
     "convert_images_batch",
     "detect_mime_type",
+    "mask_sensitive",
     "validate_aspect_ratio",
     "validate_resolution",
     # 常量

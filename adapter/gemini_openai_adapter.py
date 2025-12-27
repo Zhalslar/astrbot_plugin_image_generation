@@ -137,7 +137,9 @@ class GeminiOpenAIAdapter(BaseImageAdapter):
         prefix = self._get_log_prefix(task_id)
         try:
             session = self._get_session()
-            async with session.get(url, timeout=self._get_download_timeout()) as response:
+            async with session.get(
+                url, timeout=self._get_download_timeout()
+            ) as response:
                 if response.status == 200:
                     return await response.read()
                 logger.error(f"{prefix} 下载图像失败: {response.status} - {url}")

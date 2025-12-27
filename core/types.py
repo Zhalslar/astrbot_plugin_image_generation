@@ -42,7 +42,6 @@ class AdapterConfig:
     api_keys: list[str] = field(default_factory=list)
     model: str = ""
     available_models: list[str] = field(default_factory=list)
-    provider_id: str | None = None
     proxy: str | None = None
     timeout: int = 180
     max_retry_attempts: int = 3
