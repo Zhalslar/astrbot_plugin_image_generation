@@ -76,8 +76,11 @@ class ImageGenerationPlugin(Star):
             self.context.add_llm_tools(tool)
             logger.info("[ImageGen] 已注册图像生成工具")
 
-        # 启动定时任务
+        # 配置定时任务
         self._setup_tasks()
+
+        # 执行启动任务（在后台异步执行）
+        self.task_manager.create_task(self.task_manager.run_startup_tasks())
 
         logger.info(
             f"[ImageGen] 插件加载完成，模型: {self.config_manager.adapter_config.model if self.config_manager.adapter_config else '未知'}"
@@ -102,18 +105,29 @@ class ImageGenerationPlugin(Star):
         self._setup_jimeng_token_task()
 
     def _setup_jimeng_token_task(self) -> None:
-        """配置即梦自动领积分任务。"""
+        """配置即梦自动领积分任务。
+
+        该任务会：
+        1. 在插件启动时执行一次（通过启动任务）
+        2. 每天日期变更时自动执行（通过每日任务）
+        """
         from .adapter.jimeng2api_adapter import Jimeng2APIAdapter
 
         if self.generator and isinstance(self.generator.adapter, Jimeng2APIAdapter):
-            # 每 12 小时执行一次
-            self.task_manager.start_loop_task(
+            # 1. 注册为启动任务，插件启动时执行一次
+            self.task_manager.register_startup_task(
                 name="jimeng_token_receive",
                 coro_func=self.generator.adapter.receive_token,
-                interval_seconds=12 * 3600,
-                run_immediately=True,
             )
-            logger.info("[ImageGen] 已启动即梦2API自动领积分任务")
+
+            # 2. 注册为每日任务，日期变更时执行
+            self.task_manager.start_daily_task(
+                name="jimeng_token_receive",
+                coro_func=self.generator.adapter.receive_token,
+                check_interval_seconds=300,  # 每5分钟检查一次日期变更
+                run_immediately=False,  # 启动任务已处理，无需重复执行
+            )
+            logger.info("[ImageGen] 已配置即梦2API自动领积分任务（启动时+每日）")
 
     def _adjust_tool_parameters(self, tool: ImageGenerationTool) -> None:
         """根据适配器能力动态调整工具参数。"""
