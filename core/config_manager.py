@@ -57,8 +57,8 @@ class PluginConfig:
 class ConfigManager:
     """插件配置管理器。"""
 
-    def __init__(self, config: AstrBotConfig | None):
-        self._config = config or AstrBotConfig()
+    def __init__(self, config: AstrBotConfig):
+        self._config = config
         self._plugin_config: PluginConfig = PluginConfig()
         self._all_provider_configs: list[AdapterConfig] = []  # 保存所有供应商配置
         self.load()

@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import os
 import time
 from collections.abc import Coroutine
 from typing import Any
@@ -18,6 +17,7 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.star import Context, Star
 from astrbot.core.config.astrbot_config import AstrBotConfig
+from astrbot.core.star.star_tools import StarTools
 
 from .core.config_manager import ConfigManager
 from .core.generator import ImageGenerator
@@ -32,26 +32,26 @@ from .core.utils import mask_sensitive, validate_aspect_ratio, validate_resoluti
 class ImageGenerationPlugin(Star):
     """图像生成插件主类"""
 
-    def __init__(self, context: Context, config: AstrBotConfig | None = None):
+    def __init__(self, context: Context, config: AstrBotConfig):
         super().__init__(context)
         self.context = context
 
         # 数据目录配置
-        self.data_dir = "data/plugin_data/astrbot_plugin_gemini_generation"
-        self.cache_dir = os.path.join(self.data_dir, "cache")
-        self._ensure_dirs()
+        self.data_dir = StarTools.get_data_dir()
+        self.cache_dir = self.data_dir / "cache"
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         # 初始化配置管理器
         self.config_manager = ConfigManager(config)
 
         # 初始化使用数据管理器
         self.usage_manager = UsageManager(
-            self.data_dir, self.config_manager.usage_settings
+            str(self.data_dir), self.config_manager.usage_settings
         )
 
         # 初始化图片处理器
         self.image_processor = ImageProcessor(
-            self.cache_dir,
+            str(self.cache_dir),
             self.config_manager.usage_settings.max_image_size_mb,
             self.config_manager.cache_settings.max_cache_count,
         )
@@ -63,6 +63,11 @@ class ImageGenerationPlugin(Star):
         self.generator: ImageGenerator | None = None
         self.semaphore: asyncio.Semaphore | None = None
 
+
+    # ---------------------- 生命周期 ----------------------
+
+    async def initialize(self):
+        """插件加载时调用"""
         if self.config_manager.adapter_config:
             self.generator = ImageGenerator(self.config_manager.adapter_config)
             self.semaphore = asyncio.Semaphore(self.config_manager.max_concurrent_tasks)
@@ -86,9 +91,17 @@ class ImageGenerationPlugin(Star):
             f"[ImageGen] 插件加载完成，模型: {self.config_manager.adapter_config.model if self.config_manager.adapter_config else '未知'}"
         )
 
-    def _ensure_dirs(self) -> None:
-        """确保数据和缓存目录存在。"""
-        os.makedirs(self.cache_dir, exist_ok=True)
+    async def terminate(self):
+        """插件卸载时调用"""
+        try:
+            if self.generator:
+                await self.generator.close()
+            await self.task_manager.cancel_all()
+            logger.info("[ImageGen] 插件已卸载")
+        except Exception as exc:
+            logger.error(f"[ImageGen] 卸载清理出错: {exc}")
+
+    # ---------------------- 内部工具 ----------------------
 
     def _setup_tasks(self) -> None:
         """配置并启动定时任务。"""
@@ -225,6 +238,9 @@ class ImageGenerationPlugin(Star):
     ) -> None:
         """执行生成逻辑并发送结果。"""
         start_time = time.time()
+        if not self.generator:
+            logger.warning("[ImageGen] 生成器未初始化，跳过生成请求")
+            return
         result = await self.generator.generate(
             GenerationRequest(
                 prompt=prompt,
@@ -285,15 +301,6 @@ class ImageGenerationPlugin(Star):
 
         await self.context.send_message(unified_msg_origin, chain)
 
-    async def terminate(self) -> None:
-        """插件卸载时清理资源。"""
-        try:
-            if self.generator:
-                await self.generator.close()
-            await self.task_manager.cancel_all()
-            logger.info("[ImageGen] 插件已卸载")
-        except Exception as exc:
-            logger.error(f"[ImageGen] 卸载清理出错: {exc}")
 
     # ---------------------- 指令处理 ----------------------
 
